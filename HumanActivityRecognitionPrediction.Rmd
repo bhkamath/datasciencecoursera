@@ -1,0 +1,98 @@
+---
+title: "HumanActivityRecognitionPrediction"
+author: "B Harish Kamath"
+date: "9/29/2019"
+output: html_document
+---
+
+# Practical Machine Learning - Coursera Assignment
+# Models Used - Classification, Random Forest
+
+Qualitatively assessing and providing feedback on weight lifting exercises are made using the classification and random forest models in the following assignment.
+
+We initially read the CSV files by substituting a set of characters with Not Available (NA) data value.  As part of the cleansing operations, we also remove columns which are not of use for prediction purposes such as user name, timestamp and window information.  A total of 7 columns are dropped in the data cleansing process.
+
+```{r}
+suppressWarnings(suppressMessages(library(caret, quietly = TRUE)))
+suppressWarnings(suppressMessages(library(rpart, quietly = TRUE)))
+suppressWarnings(suppressMessages(library(rpart.plot, quietly = TRUE)))
+suppressWarnings(suppressMessages(library(randomForest, quietly = TRUE)))
+
+# Reads the CSV files and substitutes a set of characters as Not Available
+trainingCSV <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", na.strings = c("NA","#DIV/0!",""))
+dataToPredictCSV <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", na.strings = c("NA","#DIV/0!",""))
+
+# Performs cleaning operations on the training and on data-to-predict data.   
+# User name, timestamp, and window information is not applicable to prediction logic.
+# Hence dropping the corresponding columns
+trainingCSVCleansed <- subset(trainingCSV, select = -c(X,user_name,raw_timestamp_part_1,raw_timestamp_part_2,cvtd_timestamp,new_window, num_window) )
+trainingCSVCleansed <- trainingCSVCleansed[,colSums(is.na(trainingCSVCleansed)) == 0]
+dataToPredictCSVCleansed <- subset(dataToPredictCSV, select = -c(X,user_name,raw_timestamp_part_1,raw_timestamp_part_2,cvtd_timestamp,new_window, num_window) )
+dataToPredictCSVVCleansed <- dataToPredictCSVCleansed[,colSums(is.na(dataToPredictCSVCleansed)) == 0]
+
+```
+
+The data provided is considered to be a medium sample size, hence partitioning the data in the ratio of 60:40.
+
+``` {R}
+set.seed(3456)
+
+datapartition <- createDataPartition( y=trainingCSVCleansed$classe, p=0.6, list=FALSE)
+trainingData <- trainingCSVCleansed[datapartition, ]
+testData <- trainingCSVCleansed[-datapartition, ]
+
+```
+
+### Classification Tree
+
+This approach is used to predict on the test data and test the results.  Classification tree is also plotted with fallen leaves approach
+
+``` {R}
+classificationTree <- rpart(classe ~ . , data=trainingData, method="class")
+classificationPrediction <- predict(classificationTree, testData, type = "class")
+confusionMatrix(classificationPrediction, testData$classe)
+
+
+# All the nodes are labeled with leaves drawn at the bottom. The nodes are interconnected using dotted lines and boxes are filled using 3 color pallettes
+rplot = rpart.plot(classificationTree, main="Human Activity Prediction - Classification Tree", type = 4, extra = 100, fallen.leaves = TRUE, branch.lty = 3, box.palette = "YlGnBl")
+```
+
+### Random Forest
+
+This approach is used to predict on the test data by applying different parameter values on the number of trees to grow and number of variables randomly sampled as candidates to each split.  It is also considered to assess the importance of predictors in the process.
+
+Three different runs are made with random forest approach to review the accuracy of results with different parameter values.
+
+``` {R}
+rfModel_256_2 <- randomForest(classe ~ . , data=trainingData, ntree= 256, mtry=2, method="class", importance = TRUE)
+rfPrediction <- predict(rfModel_256_2, testData , type = "class")
+confusionMatrix(rfPrediction, testData$classe)
+
+rfModel_500_2 <- randomForest(classe ~ . , data=trainingData, ntree= 500, mtry=2, method="class", importance = TRUE)
+rfPrediction <- predict(rfModel_500_2, testData , type = "class")
+confusionMatrix(rfPrediction, testData$classe)
+
+rfModel_500_6 <- randomForest(classe ~ . , data=trainingData, ntree= 500, mtry=6, method="class", importance = TRUE)
+rfPrediction <- predict(rfModel_500_6, testData , type = "class")
+confusionMatrix(rfPrediction, testData$classe)
+
+```
+
+### Accuracy Details
+
+1. Classification Tree - Accuracy 0.7636
+2. Random Forest (NTree - 256, mtry = 2) - Accuracy 0.9935
+3. Random Forest (NTree - 500, mtry = 2) - Accuracy 0.9925
+4. **Random Forest (NTree - 500, mtry = 6) - Accuracy 0.9958**
+
+In summary, it is found that Random Forest with NTree - 500 and mtry of 6 provides better accuracy in cross validation prediction results of the data.  This model is applied on the test CSV file to obtain the prediction on 20 items.
+
+``` {R}
+predictfinal <- predict(rfModel_500_6, dataToPredictCSVCleansed, type="class")
+predictfinal
+
+```
+### References
+
+1. http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har
+2. R Package documentations
